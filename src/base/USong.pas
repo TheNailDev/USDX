@@ -868,6 +868,7 @@ begin
     
     if (TagMap.TryGetData('VERSION', Value)) then
     begin
+      TagMap.Remove('VERSION');
       SepPos := Pos('.', Value);
       // The Version must contain a period or otherwise it is invalid
       if (SepPos = 0) then
@@ -916,6 +917,13 @@ begin
       VersionPatch := 0;
     end;
     
+    // Reject unknown major versions
+    if (VersionMajor > 1) then
+    begin
+      Log.LogError('Unsupported fomrat version ' + IntToStr(VersionMajor) + '.X.X' + ': ' + FullFileName);
+      Exit;
+    end;
+    
     //-----------
     //Required Attributes
     //-----------
@@ -938,7 +946,29 @@ begin
       Done := Done or 2;
     end;
     
-    //MP3 File
+    //Audio File
+    // Since Fomrat 1.1.0 AUDIO is a valid header for the audio file
+    if ((VersionMajor > 1) or ((VersionMajor = 1) and (VersionMinor >= 1))) then
+    begin
+      if (TagMap.TryGetData('AUDIO', Value)) then
+      begin
+        TagMap.Remove('AUDIO');
+        // If the AUDIO header exists, the MP3 header must be disregarded
+        TagMap.Remove('MP3');
+        EncFile := DecodeFilename(Value);
+        if (Self.Path.Append(EncFile).IsFile) then
+        begin
+          self.Mp3 := EncFile;
+          //Add Mp3 Flag to Done
+          Done := Done or 4;
+        end
+        else
+        begin
+          Log.LogError('Can''t find audio file in song: ' + DecodeStringUTF8(FullFileName, Encoding));
+        end;
+      end;
+    end;
+    
     if (TagMap.TryGetData('MP3', Value)) then
     begin
       TagMap.Remove('MP3');
@@ -1082,25 +1112,37 @@ begin
     end;
     
     // Notes Gap
-    if (TagMap.TryGetData('NOTESGAP', Value)) then
+    // NOTESGAP was removed with format 1.0.0 and should be ignored
+    if (VersionMajor < 1) then
     begin
-      TagMap.Remove('NOTESGAP');
-      TryStrtoInt(Value, self.NotesGAP)
+      if (TagMap.TryGetData('NOTESGAP', Value)) then
+      begin
+        TagMap.Remove('NOTESGAP');
+        TryStrtoInt(Value, self.NotesGAP)
+      end;
     end;
     
     // Relative Notes
-    if (TagMap.TryGetData('RELATIVE', Value)) then
+    // RELATIVE was removed in format 1.0.0
+    if (VersionMajor < 1) then
     begin
-      TagMap.Remove('RELATIVE');
-      if (UpperCase(Value) = 'YES') then
-        self.Relative := true;
+      if (TagMap.TryGetData('RELATIVE', Value)) then
+      begin
+        TagMap.Remove('RELATIVE');
+        if (UpperCase(Value) = 'YES') then
+          self.Relative := true;
+      end;
     end;
     
     // File encoding
-    if (TagMap.TryGetData('ENCODING', Value)) then
+    // ENCODING was removed in format 1.0.0
+    if (VersionMajor < 1) then
     begin
-      TagMap.Remove('ENCODING');
-      self.Encoding := ParseEncoding(Value, Ini.DefaultEncoding);
+      if (TagMap.TryGetData('ENCODING', Value)) then
+      begin
+        TagMap.Remove('ENCODING');
+        self.Encoding := ParseEncoding(Value, Ini.DefaultEncoding);
+      end;
     end;
     
     // PreviewStart
@@ -1140,23 +1182,11 @@ begin
     end;
     
     // Duet Singer Name P1
-    if (TagMap.TryGetData('DUETSINGERP1', Value)) then
-    begin
-      TagMap.Remove('DUETSINGERP1');
-      DecodeStringUTF8(Value, DuetNames[0], Encoding);
-    end;
-    
-    // Duet Singer Name P2
-    if (TagMap.TryGetData('DUETSINGERP2', Value)) then
-    begin
-      TagMap.Remove('DUETSINGERP2');
-      DecodeStringUTF8(Value, DuetNames[1], Encoding);
-    end;
-    
-    // Duet Singer Name P1
     if (TagMap.TryGetData('P1', Value)) then
     begin
       TagMap.Remove('P1');
+      // If P1 is defined, DUETSINGERP1 should be ignored
+      TagMap.Remove('DUETSINGERP1');
       DecodeStringUTF8(Value, DuetNames[0], Encoding);
     end;
     
@@ -1164,7 +1194,24 @@ begin
     if (TagMap.TryGetData('P2', Value)) then
     begin
       TagMap.Remove('P2');
+      // If P2 is defined, DUETSINGERP2 should be ignored
+      TagMap.Remove('DUETSINGERP2');
       DecodeStringUTF8(Value, DuetNames[1], Encoding);
+    end;
+    
+    // DUETSINGERP1 and DUETSINGERP2 were removed in format 1.0.0
+    if (VersionMajor < 1) then
+    begin
+      if (TagMap.TryGetData('DUETSINGERP1', Value)) then
+      begin
+        TagMap.Remove('DUETSINGERP1');
+        DecodeStringUTF8(Value, DuetNames[0], Encoding);
+      end;      
+      if (TagMap.TryGetData('DUETSINGERP2', Value)) then
+      begin
+        TagMap.Remove('DUETSINGERP2');
+        DecodeStringUTF8(Value, DuetNames[1], Encoding);
+      end;
     end;
     
     // Unsupported Tags
