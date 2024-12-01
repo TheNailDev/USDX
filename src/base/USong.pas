@@ -756,6 +756,7 @@ var
   FullFileName: string;
   I, P: integer;
   TagMap: TFPGMap<string, string>;
+  VersionMajor, VersionMinor, VersionPatch: integer;
 
   { adds a custom header tag to the song
     if there is no ':' in the read line, Tag should be empty
@@ -860,6 +861,60 @@ begin
     end; // while
     
     //Read the songs attributes stored in the TagMap
+    
+    //-----------
+    //Format Version
+    //-----------
+    
+    if (TagMap.TryGetData('VERSION', Value)) then
+    begin
+      SepPos := Pos('.', Value);
+      // The Version must contain a period or otherwise it is invalid
+      if (SepPos = 0) then
+      begin
+        Log.LogError('Invalid VERSION Header "' + Value + '": ' + FullFileName);
+        Exit;
+      end;
+      // Read the major version as section in front of (first) period
+      try
+        VersionMajor := StrToInt(Trim(Copy(Value, 1, SepPos - 1)));
+      except
+        on E : EConvertError do
+        begin
+          Log.LogError('Invalid VERSION Header "' + Value + '": ' + FullFileName);
+          Exit;
+        end
+      end;
+      // Store the minor and patch version number "x.x"
+      // Line is used as the helper variable, as it is not used anymore
+      Line := Trim(Copy(Value, SepPos + 1, Length(Value) - SepPos));
+      SepPos := Pos('.', Line);
+      // The Version must contain a second period or otherwise it is invalid
+      if (SepPos = 0) then
+      begin
+        Log.LogError('Invalid VERSION Header "' + Value + '": ' + FullFileName);
+        Exit;
+      end;
+      // Read the minor version as section in between first and second period
+      // and the patch version as section after the second period
+      try
+        VersionMinor := StrToInt(Trim(Copy(Line, 1, SepPos - 1)));
+        VersionPatch := StrToInt(Trim(Copy(Line, SepPos + 1, Length(Value) - SepPos)));
+      except
+        on E : EConvertError do
+        begin
+          Log.LogError('Invalid VERSION Header "' + Value + '": ' + FullFileName);
+          Exit;
+        end
+      end;
+    end
+    else
+    begin
+      // If file does not contain VERSION Header assume format version 0.3.0
+      VersionMajor := 0;
+      VersionMinor := 3;
+      VersionPatch := 0;
+    end;
     
     //-----------
     //Required Attributes
